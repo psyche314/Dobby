@@ -493,7 +493,8 @@ if(SYSTEM.Darwin)
 endif()
 
 install(TARGETS dobby
-  LIBRARY DESTINATION lib)
+  LIBRARY DESTINATION lib
+  ARCHIVE DESTINATION lib)
 
 if(SYSTEM.Darwin)
   add_subdirectory(builtin-plugin/Dyld2HideLibrary)
@@ -503,4 +504,5 @@ if(SYSTEM.Darwin)
   endif()
 endif()
 
-add_subdirectory(example)
+# Examples are not needed when used as a library dependency.
+# add_subdirectory(example)

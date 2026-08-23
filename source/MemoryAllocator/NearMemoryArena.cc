@@ -15,7 +15,7 @@ using namespace zz;
 
 LiteMutableArray *NearMemoryArena::page_chunks;
 
-#if defined(WIN32)
+#if defined(WIN32) || defined(_WIN32)
 static const void *memmem(const void *haystack, size_t haystacklen, const void *needle, size_t needlelen) {
   if (!haystack || !needle) {
     return haystack;

@@ -2,9 +2,17 @@
 
 #include <stdio.h>
 #include <stdarg.h> // va_start
+#include <stdbool.h> // bool (required by NDK 29+ android/log.h)
 
 #include <string.h>
 #include <fcntl.h>
+
+// NDK 29+ android/log.h contains static inline definitions that cannot appear
+// inside a function body. Include it at file scope unconditionally when targeting
+// Android so the later use inside the log function is valid.
+#if defined(__ANDROID__)
+#include <android/log.h>
+#endif
 
 #if defined(_POSIX_VERSION) || defined(__APPLE__)
 #include <unistd.h>
@@ -93,7 +101,6 @@ PUBLIC int log_internal_impl(unsigned int level, const char *fmt, ...) {
   if (!_syslog_enabled && !_file_log_enabled) {
 #if defined(__ANDROID__)
 #define ANDROID_LOG_TAG "Dobby"
-#include <android/log.h>
     __android_log_vprint(ANDROID_LOG_INFO, ANDROID_LOG_TAG, fmt, ap);
 #else
     vprintf(fmt, ap);
