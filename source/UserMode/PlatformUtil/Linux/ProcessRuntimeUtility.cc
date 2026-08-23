@@ -4,13 +4,12 @@
 #include <dlfcn.h>
 #include <link.h>
 #include <sys/mman.h>
+#include <limits.h>
 
 #include <string>
 #include <string.h>
 
 #include <vector>
-
-#define LINE_MAX 2048
 
 // ================================================================
 // GetProcessMemoryLayout

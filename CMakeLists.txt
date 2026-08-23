@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.5)
+cmake_minimum_required(VERSION 3.10)
 include(cmake/EarlyGlobals.cmake)
 
 project(Dobby)
@@ -407,17 +407,15 @@ set(dobby.HEADER_FILE_LIST
   )
 
 # add build version
-string(TIMESTAMP TODAY "%Y%m%d")
-set(VERSION_REVISION "-${TODAY}")
-if (EXISTS "${CMAKE_SOURCE_DIR}/.git")
+if (EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/.git")
   execute_process(
     COMMAND git rev-parse --short --verify HEAD
-    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+    WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
     OUTPUT_VARIABLE VERSION_COMMIT_HASH
     OUTPUT_STRIP_TRAILING_WHITESPACE
   )
   if(VERSION_COMMIT_HASH)
-    set(VERSION_REVISION "${VERSION_REVISION}-${VERSION_COMMIT_HASH}")
+    set(VERSION_REVISION "${VERSION_COMMIT_HASH}")
   endif()
 endif()
 set(DOBBY_BUILD_VERSION "Dobby${VERSION_REVISION}")
