@@ -4,6 +4,9 @@
 #include "MemoryAllocator.h"
 #include "PlatformUtil/ProcessRuntime.h"
 #include <stdint.h>
+#if defined(_WIN32)
+#include <windows.h>
+#endif
 
 #define KB (1024uLL)
 #define MB (1024uLL * KB)
@@ -50,20 +53,24 @@ struct NearMemoryAllocator {
       if (addr)
         return {addr, in_size};
     } else {
-      auto search_range = MemRange(pos - range, range * 2);
+      auto low = pos > range ? pos - range : 0;
+      auto high = range > UINTPTR_MAX - pos ? UINTPTR_MAX : pos + range;
+      auto search_range = MemRange(low, high - low);
       return allocNearBlock(in_size, search_range, true);
     }
     return {};
   }
 
   MemBlock allocNearDataBlock(uint32_t in_size, addr_t pos, size_t range) {
-    auto search_range = MemRange(pos - range, range * 2);
+    auto low = pos > range ? pos - range : 0;
+      auto high = range > UINTPTR_MAX - pos ? UINTPTR_MAX : pos + range;
+      auto search_range = MemRange(low, high - low);
     return allocNearBlock(in_size, search_range, false);
   }
 
   MemBlock allocNearBlock(uint32_t in_size, MemRange search_range, bool is_exec = true) {
     // step-1: search from allocators first
-    auto allocators = is_exec ? code_page_allocators : data_page_allocators;
+    auto &allocators = is_exec ? code_page_allocators : data_page_allocators;
     for (auto allocator : allocators) {
       auto cursor = allocator->cursor();
       auto unused_size = allocator->capacity - allocator->size;
@@ -98,58 +105,36 @@ struct NearMemoryAllocator {
       if (intersect.size < in_size)
         continue;
 
-      auto unused_page = (void *)ALIGN_FLOOR(intersect.addr(), OSMemory::PageSize());
-      {
-        auto page = OSMemory::Allocate(OSMemory::PageSize(), kNoAccess, unused_page);
-        if (page != unused_page) {
-          FATAL_LOG("allocate unused page failed");
-        }
-        OSMemory::SetPermission(unused_page, OSMemory::PageSize(), is_exec ? kReadExecute : kReadWrite);
-        DEBUG_LOG("step-2 unused page: %p", unused_page);
-        auto page_allocator = new simple_linear_allocator_t((uint8_t *)unused_page, OSMemory::PageSize());
-        if (is_exec)
-          code_page_allocators.push_back(page_allocator);
-        else
-          data_page_allocators.push_back(page_allocator);
-      }
+      size_t granularity = OSMemory::PageSize();
+#if defined(_WIN32)
+      SYSTEM_INFO info;
+      GetSystemInfo(&info);
+      granularity = info.dwAllocationGranularity;
+#endif
+      auto candidate = ALIGN_CEIL(intersect.addr(), granularity);
+      if (candidate < intersect.addr() || candidate >= intersect.end() ||
+          OSMemory::PageSize() > intersect.end() - candidate)
+        continue;
+      auto page = OSMemory::Allocate(OSMemory::PageSize(), is_exec ? kReadExecute : kReadWrite, (void *)candidate);
+      if (!page)
+        continue;
+      auto allocator = new simple_linear_allocator_t((uint8_t *)page, OSMemory::PageSize());
+      if (is_exec)
+        code_page_allocators.push_back(allocator);
+      else
+        data_page_allocators.push_back(allocator);
+
       // should be fallthrough to step-1 allocator
       return allocNearBlock(in_size, search_range, is_exec);
     }
 
-    // step-3 for exec only
-    if (!is_exec) {
-      return {};
-    }
-
-    // step-3: search unused code gap in regions
-    const uint8_t invalid_code_seq[0x1000] = {0};
-    for (int i = 0; i < regions.size(); ++i) {
-      auto *region = &regions[i];
-      if (!(region->perm & MEM_PERM_X))
-        continue;
-
-      auto intersect = search_range.intersect(*region);
-      if (intersect.size < in_size)
-        continue;
-
-      auto search_start = intersect.addr();
-      auto search_size = intersect.size;
-
-      auto alignmemt = 4;
-      auto unused_code_gap =
-          memmem_impl((void *)search_start, search_size, invalid_code_seq, in_size + (alignmemt - 1));
-      if (!unused_code_gap)
-        continue;
-      unused_code_gap = (void *)ALIGN_CEIL(unused_code_gap, alignmemt);
-      DEBUG_LOG("step-3 unused code gap: %p, size: %d", unused_code_gap, in_size);
-      return {(addr_t)unused_code_gap, (size_t)in_size};
-    }
+    // Zero-filled bytes in somebody else's executable mapping are not free memory.
 
     return {};
   }
 };
 
-inline static NearMemoryAllocator gNearMemoryAllocator;
+inline NearMemoryAllocator gNearMemoryAllocator;
 NearMemoryAllocator *NearMemoryAllocator::Shared() {
   return &gNearMemoryAllocator;
 }

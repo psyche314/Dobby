@@ -72,7 +72,7 @@ struct MemoryAllocator {
     }
 
     uint8_t *result = nullptr;
-    auto allocators = is_exec ? code_page_allocators : data_page_allocators;
+    auto &allocators = is_exec ? code_page_allocators : data_page_allocators;
     for (auto allocator : allocators) {
       result = (uint8_t *)allocator->alloc(in_size);
       if (result)
@@ -82,7 +82,12 @@ struct MemoryAllocator {
     if (!result) {
       {
         auto page = OSMemory::Allocate(OSMemory::PageSize(), kNoAccess);
-        OSMemory::SetPermission(page, OSMemory::PageSize(), is_exec ? kReadExecute : kReadWrite);
+        if (!page)
+          return {};
+        if (!OSMemory::SetPermission(page, OSMemory::PageSize(), is_exec ? kReadExecute : kReadWrite)) {
+          OSMemory::Free(page, OSMemory::PageSize());
+          return {};
+        }
         auto page_allocator = new simple_linear_allocator_t((uint8_t *)page, OSMemory::PageSize());
         if (is_exec)
           code_page_allocators.push_back(page_allocator);
@@ -104,7 +109,7 @@ struct MemoryAllocator {
   }
 };
 
-inline static MemoryAllocator gMemoryAllocator;
+inline MemoryAllocator gMemoryAllocator;
 MemoryAllocator *MemoryAllocator::Shared() {
   return &gMemoryAllocator;
 }

@@ -33,7 +33,8 @@ struct AssemblerCodeBuilder {
       assembler->set_fixed_addr(fixed_addr);
     }
 
-    DobbyCodePatch((void *)fixed_addr, code_buffer->data(), code_buffer->size());
+    if (DobbyCodePatch((void *)fixed_addr, code_buffer->data(), code_buffer->size()) != 0)
+      return {};
 
     return MemBlock(fixed_addr, code_buffer->size());
   }

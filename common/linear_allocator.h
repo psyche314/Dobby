@@ -48,12 +48,11 @@ struct simple_linear_allocator_t {
   uint8_t *alloc(uint32_t in_size, uint32_t in_alignment = 0) {
     auto alignment = in_alignment ? in_alignment : builtin_alignment;
     uint32_t gap_size = ALIGN_CEIL((uintptr_t)cursor(), alignment) - (uintptr_t)cursor();
-    size += gap_size;
-
-    if (size + in_size > capacity) {
+    if (size > capacity || gap_size > capacity - size || in_size > capacity - size - gap_size) {
       return nullptr;
     }
 
+    size += gap_size;
     auto data = cursor();
     // DEBUG_LOG("alloc: %p - %p", data, in_size);
 
