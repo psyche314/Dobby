@@ -12,11 +12,6 @@
 
 using namespace zz::arm64;
 
-#define assert(x)                                                                                                      \
-  if (!(x)) {                                                                                                          \
-    *(int *)0x41414141 = 0;                                                                                            \
-  }
-
 #define ARM64_B_XXX_RANGE ((1ull << 25) << 2) // signed
 
 static Trampoline *GenerateFastForwardTrampoline(addr_t src, addr_t dst) {

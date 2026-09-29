@@ -5,7 +5,7 @@
 #include "core/arch/x86/registers-x86.h"
 #include "core/assembler/assembler.h"
 
-#include "MemoryAllocator/CodeBuffer/code_buffer_x86.h"
+#include "MemoryAllocator/CodeMemBuffer.h"
 
 #define IsInt8(imm) (-128 <= imm && imm <= 127)
 
@@ -227,13 +227,7 @@ private:
 
 class Assembler : public AssemblerBase {
 public:
-  Assembler(void *address) : AssemblerBase(address) {
-    buffer_ = new CodeBuffer();
-  }
-  ~Assembler() {
-    if (buffer_)
-      delete buffer_;
-    buffer_ = NULL;
+  Assembler(void *address) : AssemblerBase((addr_t)address) {
   }
 
 public:
@@ -439,9 +433,9 @@ public:
     MovRipToRegister(VOLATILE_REGISTER);
     call(Address(VOLATILE_REGISTER, INT32_MAX));
     {
-      auto label = RelocDataLabel::withData(function.address());
-      label->link_to(kDisp32_off_7, ip_offset());
-      AppendRelocLabel(label);
+      auto label = new RelocDataLabel((addr_t)function.address);
+      label->link_to(kDisp32_off_7, pc_offset());
+      data_labels.push_back(label);
     }
     nop();
   }

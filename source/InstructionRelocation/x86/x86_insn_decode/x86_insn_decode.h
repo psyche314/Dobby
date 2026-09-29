@@ -80,6 +80,7 @@ typedef struct {
 #define foreach_x86_gp_register _(AX) _(CX) _(DX) _(BX) _(SP) _(BP) _(SI) _(DI)
 
 typedef enum {
+#undef _
 #define _(r) X86_INSN_GP_REG_##r,
   foreach_x86_gp_register
 #undef _

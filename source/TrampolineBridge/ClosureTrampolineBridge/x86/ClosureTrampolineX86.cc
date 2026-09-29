@@ -1,44 +1,21 @@
 #include "platform_detect_macro.h"
 #if defined(TARGET_ARCH_IA32)
-
 #include "dobby/dobby_internal.h"
-
-#include "core/assembler/assembler-ia32.h"
-
-#include "TrampolineBridge/ClosureTrampolineBridge/ClosureTrampoline.h"
-
-using namespace zz;
-using namespace zz::x86;
-
-ClosureTrampolineEntry *ClosureTrampoline::CreateClosureTrampoline(void *carry_data, void *carry_handler) {
-  ClosureTrampolineEntry *tramp_entry = nullptr;
-  tramp_entry = new ClosureTrampolineEntry;
-
-  auto tramp_size = 32;
-  auto tramp_mem = MemoryAllocator::SharedAllocator()->allocateExecMemory(tramp_size);
-  if (tramp_mem == nullptr) {
+#include "TrampolineBridge/ClosureTrampolineBridge/common_bridge_handler.h"
+ClosureTrampoline *GenerateClosureTrampoline(void *data, void *handler) {
+  if (!closure_bridge_addr) closure_bridge_init();
+  auto block = gMemoryAllocator.allocExecBlock(10);
+  if (!block.addr()) return nullptr;
+  auto entry = new ClosureTrampoline(TRAMPOLINE_UNKNOWN, block, data, handler);
+  uint8_t code[10] = {0x68,0,0,0,0,0xe9,0,0,0,0};
+  auto entry_address = (uint32_t)entry;
+  auto displacement = (uint32_t)closure_bridge_addr - (block.addr() + sizeof(code));
+  memcpy(code + 1, &entry_address, 4);
+  memcpy(code + 6, &displacement, 4);
+  if (DobbyCodePatch((void *)block.addr(), code, sizeof(code)) != 0) {
+    delete entry;
     return nullptr;
   }
-
-#define _ turbo_assembler_.
-#define __ turbo_assembler_.code_buffer()->
-  TurboAssembler turbo_assembler_(tramp_mem);
-
-  int32_t offset = (int32_t)((uintptr_t)get_closure_bridge_addr() - ((uintptr_t)tramp_mem + 18));
-
-  _ sub(esp, Immediate(4, 32));
-  _ mov(Address(esp, 4 * 0), Immediate((int32_t)(uintptr_t)tramp_entry, 32));
-  _ jmp(Immediate(offset, 32));
-
-  tramp_entry->address = tramp_mem;
-  tramp_entry->size = tramp_size;
-  tramp_entry->carry_data = carry_data;
-  tramp_entry->carry_handler = carry_handler;
-
-  auto closure_tramp_buffer = static_cast<CodeMemBuffer *>(turbo_assembler_.code_buffer());
-  DobbyCodePatch(tramp_mem, (uint8_t *)closure_tramp_buffer->GetBuffer(), closure_tramp_buffer->GetBufferSize());
-
-  return tramp_entry;
+  return entry;
 }
-
 #endif

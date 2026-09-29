@@ -11,22 +11,22 @@ void Assembler::jmp(Immediate imm) {
 }
 
 addr32_t TurboAssembler::CurrentIP() {
-  return pc_offset() + (addr_t)realized_addr_;
+  return pc_offset() + (addr_t)fixed_addr;
 }
 
 void PseudoLabel::link_confused_instructions(CodeMemBuffer *buffer) {
-  auto _buffer = (CodeBuffer *)buffer;
+  auto _buffer = (CodeMemBuffer *)buffer;
 
   for (auto &ref_label_insn : ref_insts) {
-    int64_t new_offset = pos() - ref_label_insn.pc_offset;
+    int64_t new_offset = pos - ref_label_insn.inst_offset;
 
     if (ref_label_insn.link_type == kDisp32_off_7) {
       // why 7 ?
       // use `call` and `pop` get the runtime ip register
       // but the ip register not the real call next insn
       // it need add two insn length == 7
-      int disp32_fix_pos = ref_label_insn.pc_offset - sizeof(int32_t);
-      _buffer->FixBindLabel(disp32_fix_pos, new_offset + 7);
+      int disp32_fix_pos = ref_label_insn.inst_offset - sizeof(int32_t);
+      _buffer->Store<int32_t>(disp32_fix_pos, new_offset + 7);
     }
   }
 }

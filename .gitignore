@@ -79,3 +79,5 @@ xcuserdata/
 /prefab/**/*.h
 /AndroidManifest.xml
 .cache
+
+.vscode/

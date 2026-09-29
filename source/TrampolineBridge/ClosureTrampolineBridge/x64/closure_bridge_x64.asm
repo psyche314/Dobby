@@ -1,5 +1,5 @@
 #if defined(__x86_64__)
-#if defined(__WIN32__) || defined(__APPLE__)
+#if defined(__APPLE__)
 #define cdecl(s) _##s
 #else
 #define cdecl(s) s
@@ -40,22 +40,50 @@ cdecl(closure_bridge_asm):
   add rax, orig_rsp_offset // include `closure_tramp_entry_addr` stack var
   mov [rsp+rsp_offset], rax
 
-  // call convention: rdi = register context, rsi = interceptor entry
-#define closure_tramp_entry_offset (16*8+2*8)
-  mov rdi, rsp
-  mov rsi, [rsp+closure_tramp_entry_offset]
-
-  mov rax, rsp
-  and rax, 0xf
-  jz .Lstack_aligned_call_start
-  push rax
+  mov rbx, rsp
+  and rsp, -16
+  sub rsp, 16*16 + 32
+  movdqu [rsp+32+16*0], xmm0
+  movdqu [rsp+32+16*1], xmm1
+  movdqu [rsp+32+16*2], xmm2
+  movdqu [rsp+32+16*3], xmm3
+  movdqu [rsp+32+16*4], xmm4
+  movdqu [rsp+32+16*5], xmm5
+  movdqu [rsp+32+16*6], xmm6
+  movdqu [rsp+32+16*7], xmm7
+  movdqu [rsp+32+16*8], xmm8
+  movdqu [rsp+32+16*9], xmm9
+  movdqu [rsp+32+16*10], xmm10
+  movdqu [rsp+32+16*11], xmm11
+  movdqu [rsp+32+16*12], xmm12
+  movdqu [rsp+32+16*13], xmm13
+  movdqu [rsp+32+16*14], xmm14
+  movdqu [rsp+32+16*15], xmm15
+#if defined(_WIN32)
+  mov rcx, rbx
+  mov rdx, [rbx+16*8+2*8]
+#else
+  mov rdi, rbx
+  mov rsi, [rbx+16*8+2*8]
+#endif
   call cdecl(common_closure_bridge_handler)
-  pop rax
-  jmp .Lcall_end
-
-  .Lstack_aligned_call_start:
-  call cdecl(common_closure_bridge_handler)
-  .Lcall_end:
+  movdqu xmm0, [rsp+32+16*0]
+  movdqu xmm1, [rsp+32+16*1]
+  movdqu xmm2, [rsp+32+16*2]
+  movdqu xmm3, [rsp+32+16*3]
+  movdqu xmm4, [rsp+32+16*4]
+  movdqu xmm5, [rsp+32+16*5]
+  movdqu xmm6, [rsp+32+16*6]
+  movdqu xmm7, [rsp+32+16*7]
+  movdqu xmm8, [rsp+32+16*8]
+  movdqu xmm9, [rsp+32+16*9]
+  movdqu xmm10, [rsp+32+16*10]
+  movdqu xmm11, [rsp+32+16*11]
+  movdqu xmm12, [rsp+32+16*12]
+  movdqu xmm13, [rsp+32+16*13]
+  movdqu xmm14, [rsp+32+16*14]
+  movdqu xmm15, [rsp+32+16*15]
+  mov rsp, rbx
 
   // general register
   pop rax
@@ -90,4 +118,7 @@ cdecl(closure_bridge_asm_end):
 .align 8
 common_closure_bridge_handler_addr:
 .quad cdecl(common_closure_bridge_handler)
+#endif
+#if defined(__ELF__)
+.section .note.GNU-stack,"",%progbits
 #endif

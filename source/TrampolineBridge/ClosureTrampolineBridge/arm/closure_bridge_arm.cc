@@ -10,18 +10,18 @@
 using namespace zz;
 using namespace zz::arm;
 
-static asm_func_t closure_bridge = nullptr;
 
-asm_func_t get_closure_bridge_addr() {
+
+void closure_bridge_init() {
 
   // if already initialized, just return.
-  if (closure_bridge)
-    return closure_bridge;
+  if (closure_bridge_addr)
+    return;
 
 // check if enable the inline-assembly closure_bridge_template
 #if ENABLE_CLOSURE_BRIDGE_TEMPLATE
   extern void closure_bridge_tempate();
-  closure_bridge = closure_bridge_template;
+  closure_bridge_addr = closure_bridge_template;
 // otherwise, use the Assembler build the closure_bridge
 #else
 #define _ turbo_assembler_.
@@ -79,12 +79,12 @@ asm_func_t get_closure_bridge_addr() {
   // auto switch A32 & T32 with `least significant bit`, refer `docs/A32_T32_states_switch.md`
   _ mov(pc, Operand(r12));
 
-  auto code = AssemblyCodeBuilder::FinalizeFromTurboAssembler(&turbo_assembler_);
-  closure_bridge = (asm_func_t)code->addr;
+  auto code = AssemblerCodeBuilder::FinalizeFromTurboAssembler(&turbo_assembler_);
+  closure_bridge_addr = (asm_func_t)code.addr();
 
-  DEBUG_LOG("[closure bridge] closure bridge at %p", closure_bridge);
+  DEBUG_LOG("[closure bridge] closure bridge at %p", closure_bridge_addr);
 #endif
-  return closure_bridge;
+  return;
 }
 
 #endif

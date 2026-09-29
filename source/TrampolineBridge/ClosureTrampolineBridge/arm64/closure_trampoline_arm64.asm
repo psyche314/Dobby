@@ -1,5 +1,5 @@
 #if defined(__arm64__) || defined(__aarch64__)
-#if defined(__WIN32__) || defined(__APPLE__)
+#if defined(__APPLE__)
 #define cdecl(s) _##s
 #else
 #define cdecl(s) s
@@ -38,4 +38,7 @@ closure_bridge_addr:
 
 .globl cdecl(closure_trampoline_asm_end)
 cdecl(closure_trampoline_asm_end):
+#endif
+#if defined(__ELF__)
+.section .note.GNU-stack,"",%progbits
 #endif

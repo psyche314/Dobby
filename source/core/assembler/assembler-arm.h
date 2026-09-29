@@ -6,7 +6,7 @@
 #include "core/arch/arm/registers-arm.h"
 #include "core/assembler/assembler.h"
 
-#include "MemoryAllocator/CodeBuffer/code_buffer_arm.h"
+#include "MemoryAllocator/CodeMemBuffer.h"
 
 enum ref_label_type_t { kLdrLiteral };
 
@@ -185,14 +185,13 @@ private:
   ExecuteState execute_state_;
 
 public:
-  Assembler(void *address) : AssemblerBase(address) {
+  Assembler(void *address) : AssemblerBase((addr_t)address) {
     execute_state_ = ARMExecuteState;
-    buffer_ = new CodeBuffer();
   }
 
   // shared_ptr is better choice
   // but we can't use it at kernelspace
-  Assembler(void *address, CodeBuffer *buffer) : AssemblerBase(address) {
+  Assembler(void *address, CodeMemBuffer *buffer) : AssemblerBase((addr_t)address, buffer) {
     execute_state_ = ARMExecuteState;
     buffer_ = buffer;
   }
@@ -211,7 +210,7 @@ public:
 
   void SetRealizedAddress(void *address) {
     DCHECK_EQ(0, reinterpret_cast<uint64_t>(address) % 4);
-    AssemblerBase::SetRealizedAddress(address);
+    AssemblerBase::set_fixed_addr((addr_t)address);
   }
 
   void EmitARMInst(arm_inst_t instr);
@@ -314,16 +313,16 @@ public:
   ~TurboAssembler() {
   }
 
-  TurboAssembler(void *address, CodeBuffer *buffer) : Assembler(address, buffer) {
+  TurboAssembler(void *address, CodeMemBuffer *buffer) : Assembler(address, buffer) {
   }
 
   void Ldr(Register rt, PseudoLabel *label) {
-    if (label->pos()) {
-      int offset = label->pos() - buffer_->buffer_size();
+    if (label->pos) {
+      int offset = label->pos - buffer_->size();
       ldr(rt, MemOperand(pc, offset));
     } else {
       // record this ldr, and fix later.
-      label->link_to(kLdrLiteral, buffer_->buffer_size());
+      label->link_to(kLdrLiteral, buffer_->size());
       ldr(rt, MemOperand(pc, 0));
     }
   }
@@ -333,14 +332,14 @@ public:
     bl(0);
     b(4);
     ldr(pc, MemOperand(pc, -4));
-    buffer_->Emit<int32_t>((uint32_t)(uintptr_t)function.address());
+    buffer_->Emit<int32_t>((uint32_t)(uintptr_t)function.address);
   }
 
   void Move32Immeidate(Register rd, const Operand &x, Condition cond = AL) {
   }
 
   void RelocLabelFixup(stl::unordered_map<off_t, off_t> *relocated_offset_map) {
-    for (auto *data_label : data_labels_) {
+    for (auto *data_label : data_labels) {
       auto val = data_label->data<int32_t>();
       auto iter = relocated_offset_map->find(val);
       if (iter != relocated_offset_map->end()) {

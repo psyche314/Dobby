@@ -6,6 +6,7 @@
 #include <string.h>
 #include <stdbool.h>
 #include <time.h>
+#include <chrono>
 
 #if defined(__linux__) || defined(__APPLE__)
 #include <unistd.h>
@@ -53,13 +54,13 @@ void Logger::logv(LogLevel level, const char *in_fmt, va_list ap) {
   }
 
   if (enable_time_tag_) {
-    struct timeval tv;
-    gettimeofday(&tv, NULL);
-    time_t now = tv.tv_sec;
+    auto stamp = std::chrono::system_clock::now();
+    time_t now = std::chrono::system_clock::to_time_t(stamp);
+    auto millis = std::chrono::duration_cast<std::chrono::milliseconds>(stamp.time_since_epoch()).count() % 1000;
     struct tm *tm = localtime(&now);
     snprintf(fmt_buffer + strlen(fmt_buffer), sizeof(fmt_buffer) - strlen(fmt_buffer),
              "%04d-%02d-%02d %02d:%02d:%02d.%d ", tm->tm_year + 1900, tm->tm_mon + 1, tm->tm_mday, tm->tm_hour,
-             tm->tm_min, tm->tm_sec, tv.tv_usec / 1000);
+             tm->tm_min, tm->tm_sec, (int)millis);
   }
 
   snprintf(fmt_buffer + strlen(fmt_buffer), sizeof(fmt_buffer) - strlen(fmt_buffer), "%s\n", in_fmt);

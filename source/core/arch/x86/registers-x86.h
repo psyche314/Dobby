@@ -2,7 +2,7 @@
 #define ARCH_IA32_REGISTERS
 
 #include "core/arch/x86/constants-x86.h"
-#include "core/arch/Cpu.h"
+#include "core/arch/CpuRegister.h"
 
 namespace zz {
 namespace x86 {
@@ -49,7 +49,7 @@ public:
 
 public:
   bool is_byte_register() const {
-    return reg_code_ <= 3;
+    return reg_id <= 3;
   }
 
   int size() {

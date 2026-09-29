@@ -19,6 +19,8 @@ int GenRelocateCodeFixed(void *buffer, CodeMemBlock *origin, CodeMemBlock *reloc
   TurboAssembler turbo_assembler_(0);
   // Set fixed executable code chunk address
   turbo_assembler_.set_fixed_addr(relocated->addr());
+#undef _
+#undef __
 #define _ turbo_assembler_.
 #define __ turbo_assembler_.code_buffer()->
 

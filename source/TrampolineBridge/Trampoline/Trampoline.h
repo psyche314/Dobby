@@ -21,7 +21,7 @@ struct Trampoline {
   int type;
   CodeMemBlock buffer;
 
-  Trampoline *forward_trampoline;
+  Trampoline *forward_trampoline = nullptr;
 
   Trampoline() : type(0), buffer() {
   }

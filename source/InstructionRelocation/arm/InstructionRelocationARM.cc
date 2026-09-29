@@ -26,7 +26,7 @@ typedef struct {
   addr_t dst_vmaddr;
 
   CodeMemBlock *relocated;
-  CodeBuffer *relocated_buffer;
+  CodeMemBuffer *relocated_buffer;
 
   ExecuteState start_state;
   ExecuteState curr_state;
@@ -98,9 +98,8 @@ uint32_t arm_shift_c(uint32_t val, uint32_t shift_type, uint32_t shift_count, ui
   switch (shift_type) {
   case arm_shift_lsl:
     r_val = val;
-    r_val = r_val << shift_count;
-    carry = (r_val >> 32) & 0x1;
-    val = r_val;
+    carry = shift_count <= 32 ? (val >> (32 - shift_count)) & 1 : 0;
+    val = shift_count < 32 ? val << shift_count : 0;
     break;
   case arm_shift_lsr:
     r_val = val;
@@ -180,8 +179,8 @@ static void ARMRelocateSingleInsn(relo_ctx_t *ctx, int32_t insn) {
         dst_vmaddr = relo_cur_src_vmaddr(ctx) - imm12;
       Register regRt = Register::R(Rt);
 
-      auto label = RelocDataLabel::withData(dst_vmaddr);
-      _ AppendRelocLabel(label);
+      auto label = new RelocDataLabel(dst_vmaddr);
+      _ data_labels.push_back(label);
 
       if (regRt.code() == pc.code()) {
         _ Ldr(VOLATILE_REGISTER, label);
@@ -225,8 +224,8 @@ static void ARMRelocateSingleInsn(relo_ctx_t *ctx, int32_t insn) {
 
         if (dst_vmaddr != -1) {
           Register regRd = Register::R(Rd);
-          auto dst_label = RelocDataLabel::withData(dst_vmaddr);
-          _ AppendRelocLabel(dst_label);
+          auto dst_label = new RelocDataLabel(dst_vmaddr);
+          _ data_labels.push_back(dst_label);
 
           _ Ldr(regRd, dst_label);
 
@@ -312,7 +311,7 @@ static void Thumb1RelocateSingleInsn(relo_ctx_t *ctx, int16_t insn) {
         set_bits(rewrite_inst, 3, 6, VOLATILE_REGISTER.code());
 
         auto label = ThumbRelocLabelEntry::withData(relo_cur_src_vmaddr(ctx), false);
-        _ AppendRelocLabel(label);
+        _ data_labels.push_back(label);
 
         _ T2_Ldr(VOLATILE_REGISTER, label);
         _ EmitInt16(rewrite_inst);
@@ -332,7 +331,7 @@ static void Thumb1RelocateSingleInsn(relo_ctx_t *ctx, int16_t insn) {
 
           addr_t dst_vmaddr = relo_cur_src_vmaddr(ctx);
           auto label = ThumbRelocLabelEntry::withData(dst_vmaddr, true);
-          _ AppendRelocLabel(label);
+          _ data_labels.push_back(label);
 
           _ T2_Ldr(pc, label);
 
@@ -348,7 +347,7 @@ static void Thumb1RelocateSingleInsn(relo_ctx_t *ctx, int16_t insn) {
 
           addr_t dst_vmaddr = relo_cur_src_vmaddr(ctx);
           auto label = ThumbRelocLabelEntry::withData(dst_vmaddr, true);
-          _ AppendRelocLabel(label);
+          _ data_labels.push_back(label);
 
           _ t2_bl(4);
           _ t2_b(4);           // goto [rest flow]
@@ -375,7 +374,7 @@ static void Thumb1RelocateSingleInsn(relo_ctx_t *ctx, int16_t insn) {
     rt = bits(insn, 8, 10);
 
     auto label = ThumbRelocLabelEntry::withData(dst_vmaddr, false);
-    _ AppendRelocLabel(label);
+    _ data_labels.push_back(label);
 
     _ T2_Ldr(Register::R(rt), label);
     _ t2_ldr(Register::R(rt), MemOperand(Register::R(rt), 0));
@@ -394,7 +393,7 @@ static void Thumb1RelocateSingleInsn(relo_ctx_t *ctx, int16_t insn) {
     addr_t dst_vmaddr = relo_cur_src_vmaddr(ctx) + imm32;
 
     auto label = ThumbRelocLabelEntry::withData(dst_vmaddr, false);
-    _ AppendRelocLabel(label);
+    _ data_labels.push_back(label);
 
     _ T2_Ldr(Register::R(rd), label);
 
@@ -417,7 +416,7 @@ static void Thumb1RelocateSingleInsn(relo_ctx_t *ctx, int16_t insn) {
     dst_vmaddr |= 1;
 
     auto label = ThumbRelocLabelEntry::withData(dst_vmaddr, true);
-    _ AppendRelocLabel(label);
+    _ data_labels.push_back(label);
 
     thumb1_inst_t b_cond_insn = 0xe000;
     set_bits(b_cond_insn, 8, 11, cond);
@@ -442,7 +441,7 @@ static void Thumb1RelocateSingleInsn(relo_ctx_t *ctx, int16_t insn) {
     rn = bits(insn, 0, 2);
 
     auto label = ThumbRelocLabelEntry::withData(dst_vmaddr + 1, true);
-    _ AppendRelocLabel(label);
+    _ data_labels.push_back(label);
 
     imm5 = bits(0x4, 1, 5);
     set_bits(insn, 3, 7, imm5);
@@ -468,7 +467,7 @@ static void Thumb1RelocateSingleInsn(relo_ctx_t *ctx, int16_t insn) {
     addr_t dst_vmaddr = relo_cur_src_vmaddr(ctx) + imm;
 
     auto label = ThumbRelocLabelEntry::withData(dst_vmaddr + 1, true);
-    _ AppendRelocLabel(label);
+    _ data_labels.push_back(label);
 
     _ T2_Ldr(pc, label);
 
@@ -693,12 +692,12 @@ void gen_arm_relocate_code(relo_ctx_t *ctx) {
 
   while (ctx->buffer_cursor < ctx->buffer + ctx->buffer_size) {
     uint32_t orig_off = ctx->buffer_cursor - ctx->buffer;
-    uint32_t relocated_off = relocated_buffer->GetBufferSize();
+    uint32_t relocated_off = relocated_buffer->size();
     ctx->relocated_offset_map[orig_off] = relocated_off;
 
     arm_inst_t insn = *(arm_inst_t *)ctx->buffer_cursor;
 
-    int last_relo_offset = turbo_assembler_->code_buffer()->GetBufferSize();
+    int last_relo_offset = turbo_assembler_->code_buffer()->size();
 
     ARMRelocateSingleInsn(ctx, insn);
     DEBUG_LOG("[arm] Relocate arm insn: 0x%x", insn);
@@ -731,7 +730,7 @@ void gen_thumb_relocate_code(relo_ctx_t *ctx) {
 
   while (ctx->buffer_cursor < ctx->buffer + ctx->buffer_size) {
     uint32_t orig_off = ctx->buffer_cursor - ctx->buffer;
-    uint32_t relocated_off = relocated_buffer->GetBufferSize();
+    uint32_t relocated_off = relocated_buffer->size();
     ctx->relocated_offset_map[orig_off] = relocated_off;
 
     // align nop
@@ -739,7 +738,7 @@ void gen_thumb_relocate_code(relo_ctx_t *ctx) {
 
     thumb2_inst_t insn = *(thumb2_inst_t *)ctx->buffer_cursor;
 
-    int last_relo_offset = relocated_buffer->GetBufferSize();
+    int last_relo_offset = relocated_buffer->size();
     if (is_thumb2(insn)) {
       Thumb2RelocateSingleInsn(ctx, (uint16_t)insn, (uint16_t)(insn >> 16));
       DEBUG_LOG("[arm] Relocate thumb2 insn: 0x%x", insn);
@@ -788,10 +787,10 @@ void GenRelocateCode(void *buffer, CodeMemBlock *origin, CodeMemBlock *relocated
   ctx.buffer = ctx.buffer_cursor = (uint8_t *)buffer;
   ctx.buffer_size = origin->size;
 
-  ctx.src_vmaddr = (addr_t)origin->addr;
+  ctx.src_vmaddr = (addr_t)origin->addr();
   ctx.dst_vmaddr = 0;
 
-  auto *relocated_buffer = new CodeBuffer();
+  auto *relocated_buffer = new CodeMemBuffer();
   ctx.relocated_buffer = relocated_buffer;
 
   ThumbTurboAssembler thumb_turbo_assembler_(0, ctx.relocated_buffer);
@@ -832,7 +831,7 @@ relocate_remain:
 
   // update origin
   int new_origin_len = (addr_t)ctx.buffer_cursor - (addr_t)ctx.buffer;
-  origin->reset(origin->addr, new_origin_len);
+  origin->reset(origin->addr(), new_origin_len);
 
   // TODO: if last insn is unlink branch, skip
   if (branch) {
@@ -841,12 +840,12 @@ relocate_remain:
       thumb_ AlignThumbNop();
       thumb_ t2_ldr(pc, MemOperand(pc, 0));
       // get the real branch address
-      thumb_ EmitAddress(origin->addr + origin->size + THUMB_ADDRESS_FLAG);
+      thumb_ EmitAddress(origin->addr() + origin->size + THUMB_ADDRESS_FLAG);
     } else {
       // branch to the rest of instructions
       CodeGen codegen(&arm_turbo_assembler_);
       // get the real branch address
-      codegen.LiteralLdrBranch(origin->addr + origin->size);
+      codegen.LiteralLdrBranch(origin->addr() + origin->size);
     }
   }
 
@@ -858,25 +857,19 @@ relocate_remain:
   thumb_turbo_assembler_.relocDataLabels();
   arm_turbo_assembler_.relocDataLabels();
 
-  // generate executable code
-  {
-    // assembler without specific memory address
-    auto relocated_mem = MemoryAllocator::SharedAllocator()->allocateExecMemory(relocated_buffer->GetBufferSize());
-    if (relocated_mem == nullptr)
-      return;
-
-    thumb_turbo_assembler_.SetRealizedAddress((void *)relocated_mem);
-    arm_turbo_assembler_.SetRealizedAddress((void *)relocated_mem);
-
-    AssemblyCode *code = NULL;
-    code = AssemblyCodeBuilder::FinalizeFromTurboAssembler(ctx.curr_assembler);
-    relocated->reset(code->addr, code->size);
+  auto block = gMemoryAllocator.allocExecBlock(relocated_buffer->size());
+  if (!block.addr()) {
+    delete relocated_buffer;
+    return;
   }
+  thumb_turbo_assembler_.set_fixed_addr(block.addr());
+  arm_turbo_assembler_.set_fixed_addr(block.addr());
+  *relocated = AssemblerCodeBuilder::FinalizeFromTurboAssembler(ctx.curr_assembler);
 
   // thumb
   if (ctx.start_state == ThumbExecuteState) {
     // add thumb address flag
-    relocated->reset(relocated->addr + THUMB_ADDRESS_FLAG, relocated->size);
+    relocated->reset(relocated->addr() + THUMB_ADDRESS_FLAG, relocated->size);
   }
 
   // clean

@@ -10,18 +10,18 @@
 using namespace zz;
 using namespace zz::x86;
 
-static asm_func_t closure_bridge = NULL;
 
-asm_func_t get_closure_bridge_addr() {
+
+void closure_bridge_init() {
   // if already initialized, just return.
-  if (closure_bridge)
-    return closure_bridge;
+  if (closure_bridge_addr)
+    return;
 
 // Check if enable the inline-assembly closure_bridge_template
 #if ENABLE_CLOSURE_BRIDGE_TEMPLATE
 
   extern void closure_bridge_tempate();
-  closure_bridge = closure_bridge_template;
+  closure_bridge_addr = closure_bridge_template;
 
 #else
 
@@ -101,12 +101,12 @@ asm_func_t get_closure_bridge_addr() {
 
   _ relocDataLabels();
 
-  auto code = AssemblyCodeBuilder::FinalizeFromTurboAssembler(&turbo_assembler_);
-  closure_bridge = (asm_func_t)code->addr;
+  auto code = AssemblerCodeBuilder::FinalizeFromTurboAssembler(&turbo_assembler_);
+  closure_bridge_addr = (asm_func_t)code.addr();
 
-  DEBUG_LOG("[closure bridge]  closure bridge at %p", closure_bridge);
+  DEBUG_LOG("[closure bridge]  closure bridge at %p", closure_bridge_addr);
 #endif
-  return closure_bridge;
+  return;
 }
 
 #endif

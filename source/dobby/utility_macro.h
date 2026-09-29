@@ -33,15 +33,7 @@
 #define VALUE(x) VALUE_TO_STRING(x)
 #define VAR_NAME_VALUE(var) #var "=" VALUE(var)
 
-// format print
-#ifdef __LP64__
-#define __PRI_64_prefix "l"
-#define __PRI_PTR_prefix "l"
-#else
-#define __PRI_64_prefix "ll"
-#define __PRI_PTR_prefix
-#endif
-#define PRIxPTR __PRI_PTR_prefix "x" /* uintptr_t */
+#include <inttypes.h>
 
 // deprecated declared
 #if defined(__GNUC__) || defined(__clang__)
@@ -55,7 +47,7 @@
 
 // export method
 #if defined(_WIN32)
-#define PUBLIC
+#define PUBLIC __declspec(dllexport)
 #else
 #define PUBLIC __attribute__((visibility("default")))
 #define INTERNAL __attribute__((visibility("internal")))
