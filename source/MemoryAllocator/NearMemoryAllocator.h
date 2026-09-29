@@ -36,11 +36,6 @@ inline void *memmem_impl(const void *haystack, size_t haystacklen, const void *n
 }
 
 inline dobby_alloc_near_code_callback_t custom_alloc_near_code_handler = nullptr;
-PUBLIC inline void dobby_register_alloc_near_code_callback(dobby_alloc_near_code_callback_t handler) {
-  features::apple::arm64e_pac_strip_and_sign(handler);
-  custom_alloc_near_code_handler = handler;
-}
-
 struct NearMemoryAllocator {
   stl::vector<simple_linear_allocator_t*> code_page_allocators;
   stl::vector<simple_linear_allocator_t*> data_page_allocators;

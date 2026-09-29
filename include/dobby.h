@@ -130,6 +130,16 @@ typedef struct {
 // memory code patch
 DOBBY_API int DobbyCodePatch(void *address, uint8_t *buffer, uint32_t buffer_size);
 
+// Prepare builds the original trampoline without patching the function entry.
+// Output is published only on success. Lifecycle operations require callers to
+// quiesce execution of the target, replacement and trampoline while patching.
+DOBBY_API int DobbyPrepare(void *address, void *fake_func, void **out_origin_func);
+// Commit/Enable activate a prepared or disabled hook; repeated calls are idempotent.
+DOBBY_API int DobbyCommit(void *address);
+DOBBY_API int DobbyEnable(void *address);
+// Disable restores entry bytes and retains the original trampoline.
+DOBBY_API int DobbyDisable(void *address);
+
 // function inline hook
 DOBBY_API int DobbyHook(void *address, void *fake_func, void **out_origin_func);
 

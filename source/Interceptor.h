@@ -25,7 +25,8 @@ struct Interceptor {
     MemBlock patched;
     MemBlock relocated;
 
-    InterceptRouting *routing;
+    InterceptRouting *routing = nullptr;
+    bool enabled = false;
 
     uint8_t *origin_code_ = 0;
 
@@ -34,21 +35,15 @@ struct Interceptor {
     }
 
     ~Entry() {
+      operator delete(origin_code_);
     }
 
     void backup_orig_code() {
       __FUNC_CALL_TRACE__();
-      auto orig = (uint8_t *)this->addr;
+      auto orig = (uint8_t *)patched.addr();
       uint32_t tramp_size = this->patched.size;
       origin_code_ = (uint8_t *)operator new(tramp_size);
       memcpy(origin_code_, orig, tramp_size);
-    }
-
-    void restore_orig_code() {
-      __FUNC_CALL_TRACE__();
-      DobbyCodePatch((void *)patched.addr(), origin_code_, patched.size);
-      operator delete(origin_code_);
-      origin_code_ = nullptr;
     }
 
     void feature_set_arm_thumb(bool thumb) {
@@ -93,7 +88,7 @@ struct Interceptor {
   }
 };
 
-inline static Interceptor gInterceptor;
+inline Interceptor gInterceptor;
 
 inline Interceptor *Interceptor::Shared() {
   return &gInterceptor;
