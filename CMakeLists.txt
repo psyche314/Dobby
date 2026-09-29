@@ -7,6 +7,7 @@ option(DOBBY_GENERATE_SHARED "Build shared and static libraries" ON)
 option(NearBranch "Prefer a near branch trampoline" ON)
 option(FullFloatingPointRegisterPack "Save all ARM64 floating-point registers" OFF)
 option(Plugin.SymbolResolver "Build DobbySymbolResolver" ON)
+option(DOBBY_BUILD_TEST "Build native end-to-end tests" OFF)
 if(MSVC AND NOT CMAKE_CXX_COMPILER_ID MATCHES "Clang")
   message(FATAL_ERROR "Dobby requires Clang on Windows.")
 endif()
@@ -143,6 +144,10 @@ install(TARGETS ${dobby_targets} EXPORT DobbyTargets
   RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
 install(FILES include/dobby.h DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
 install(EXPORT DobbyTargets NAMESPACE Dobby:: DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/Dobby)
+if(DOBBY_BUILD_TEST)
+  enable_testing()
+  add_subdirectory(tests/e2e)
+endif()
 
 configure_package_config_file(cmake/DobbyConfig.cmake.in
   "${CMAKE_CURRENT_BINARY_DIR}/DobbyConfig.cmake"

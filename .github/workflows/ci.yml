@@ -1,0 +1,37 @@
+name: Native E2E
+on: [push, pull_request, workflow_dispatch]
+permissions:
+  contents: read
+jobs:
+  native:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {os: ubuntu-24.04, cc: gcc, cxx: g++}
+          - {os: ubuntu-24.04, cc: clang, cxx: clang++}
+          - {os: ubuntu-24.04-arm, cc: gcc, cxx: g++}
+          - {os: macos-14, cc: clang, cxx: clang++}
+          - {os: windows-2022, cc: clang, cxx: clang++}
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Windows developer environment
+        if: runner.os == 'Windows'
+        uses: ilammy/msvc-dev-cmd@v1
+      - name: Configure
+        run: cmake -S . -B build -G Ninja -DCMAKE_C_COMPILER=${{ matrix.cc }} -DCMAKE_CXX_COMPILER=${{ matrix.cxx }} -DCMAKE_BUILD_TYPE=Release -DDOBBY_BUILD_TEST=ON
+      - name: Build
+        run: cmake --build build --parallel 4
+      - name: Execute lifecycle and cross-page checks
+        run: ctest --test-dir build --output-on-failure --verbose
+      - name: Install
+        run: cmake --install build --prefix install
+      - name: Static-only build and installed C consumer
+        run: |
+          cmake -S . -B static -G Ninja -DCMAKE_C_COMPILER=${{ matrix.cc }} -DCMAKE_CXX_COMPILER=${{ matrix.cxx }} -DCMAKE_BUILD_TYPE=Release -DDOBBY_GENERATE_SHARED=OFF
+          cmake --build static --target dobby --parallel 4
+          cmake --install static --prefix static-install
+          cmake -S tests/e2e/consumer -B consumer -G Ninja -DCMAKE_C_COMPILER=${{ matrix.cc }} -DCMAKE_CXX_COMPILER=${{ matrix.cxx }} -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="${{ github.workspace }}/static-install"
+          cmake --build consumer
+          ./consumer/consumer
