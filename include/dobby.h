@@ -123,6 +123,10 @@ typedef struct {
 #define DOBBY_API
 #endif
 
+// Patch all touched pages and restore their original permissions.
+// Returns 0 on success, -1 before writing bytes, -2 if bytes were written but
+// permission restoration/cache synchronization failed. Memory must stay mapped.
+// The operation is not an atomic instruction update; callers must quiesce execution.
 // memory code patch
 DOBBY_API int DobbyCodePatch(void *address, uint8_t *buffer, uint32_t buffer_size);
 
