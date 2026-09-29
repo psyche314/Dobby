@@ -4,7 +4,7 @@
 #include <unistd.h>
 #include <vector>
 
-PUBLIC int DobbyCodePatch(void *address, uint8_t *buffer, uint32_t size) {
+static int PatchCode(void *address, uint8_t *buffer, uint32_t size, bool executable) {
   auto start = (uintptr_t)address;
   if (!address || !buffer || !size || size > UINTPTR_MAX - start)
     return -1;
@@ -36,6 +36,10 @@ PUBLIC int DobbyCodePatch(void *address, uint8_t *buffer, uint32_t size) {
                      (perm[2] == 'x' ? PROT_EXEC : 0);
     if (!(protection & PROT_READ))
       break;
+    // NativeBridge exposes host maps: guest executable pages may appear read-only.
+    // For our own trampolines and function entries, the logical execute permission
+    // is known. Generic byte patches continue to preserve the observed permissions.
+    if (executable) protection |= PROT_EXEC;
     while (cursor < high) {
       pages.push_back({cursor, protection});
       if (cursor == last) { complete = true; break; }
@@ -66,4 +70,12 @@ PUBLIC int DobbyCodePatch(void *address, uint8_t *buffer, uint32_t size) {
   }
   // -2 means the bytes were written but restoring permissions failed.
   return !patched ? -1 : (restored ? 0 : -2);
+}
+
+PUBLIC int DobbyCodePatch(void *address, uint8_t *buffer, uint32_t size) {
+  return PatchCode(address, buffer, size, false);
+}
+
+int PatchExecutableCode(void *address, uint8_t *buffer, uint32_t size) {
+  return PatchCode(address, buffer, size, true);
 }

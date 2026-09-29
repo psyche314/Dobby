@@ -32,7 +32,7 @@ ClosureTrampoline *GenerateClosureTrampoline(void *carry_data, void *carry_handl
   *(addr_t *)(tramp_buf + closure_tramp_off) = (addr_t)closure_tramp;
   *(addr_t *)(tramp_buf + closure_bridge_addr_off) = (addr_t)closure_bridge_addr;
   auto tramp_block = gMemoryAllocator.allocExecBlock(tramp_size);
-  DobbyCodePatch((void *)tramp_block.addr(), tramp_buf, tramp_size);
+  PatchExecutableCode((void *)tramp_block.addr(), tramp_buf, tramp_size);
 #else
   auto tramp_size = 32;
   auto blk = gMemoryAllocator.allocExecBlock(tramp_size);

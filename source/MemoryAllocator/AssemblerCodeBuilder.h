@@ -1,6 +1,7 @@
 #pragma once
 
 #include "MemoryAllocator.h"
+#include "PlatformUnifiedInterface/ExecMemory/CodePatchTool.h"
 
 #include "core/assembler/assembler.h"
 
@@ -33,7 +34,7 @@ struct AssemblerCodeBuilder {
       assembler->set_fixed_addr(fixed_addr);
     }
 
-    if (DobbyCodePatch((void *)fixed_addr, code_buffer->data(), code_buffer->size()) != 0)
+    if (PatchExecutableCode((void *)fixed_addr, code_buffer->data(), code_buffer->size()) != 0)
       return {};
 
     return MemBlock(fixed_addr, code_buffer->size());

@@ -57,7 +57,7 @@ int set_enabled(Interceptor::Entry *entry, bool enabled) {
     return -1;
   if (entry->enabled == enabled)
     return 0;
-  int result = DobbyCodePatch(address, enabled ? patch : entry->origin_code_, (uint32_t)size);
+  int result = PatchExecutableCode(address, enabled ? patch : entry->origin_code_, (uint32_t)size);
   // A post-write protection/cache error must retain the entry in its actual state.
   if (result == 0 || result == -2)
     entry->enabled = enabled;

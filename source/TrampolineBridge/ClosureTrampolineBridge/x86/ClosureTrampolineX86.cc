@@ -12,7 +12,7 @@ ClosureTrampoline *GenerateClosureTrampoline(void *data, void *handler) {
   auto displacement = (uint32_t)closure_bridge_addr - (block.addr() + sizeof(code));
   memcpy(code + 1, &entry_address, 4);
   memcpy(code + 6, &displacement, 4);
-  if (DobbyCodePatch((void *)block.addr(), code, sizeof(code)) != 0) {
+  if (PatchExecutableCode((void *)block.addr(), code, sizeof(code)) != 0) {
     delete entry;
     return nullptr;
   }

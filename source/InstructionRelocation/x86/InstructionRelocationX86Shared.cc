@@ -122,7 +122,7 @@ int GenRelocateSingleX86Insn(addr_t curr_orig_ip, addr_t curr_relo_ip, uint8_t *
       auto relo_next_ip = curr_relo_ip + x86_insn_encoded_len;
       codegen_x64_jmp_absolute_addr(&rip_insn_seq_buffer, relo_next_ip);
 
-      DobbyCodePatch((void *)rip_insn_seq_addr, rip_insn_seq_buffer.buffer, rip_insn_seq_buffer.buffer_size);
+      PatchExecutableCode((void *)rip_insn_seq_addr, rip_insn_seq_buffer.buffer, rip_insn_seq_buffer.buffer_size);
     }
 
   } else if (insn.primary_opcode == 0xEB) { // jmp rel8
