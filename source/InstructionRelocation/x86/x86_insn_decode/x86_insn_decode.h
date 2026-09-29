@@ -173,6 +173,7 @@ typedef struct x86_insn_decode_t {
 
     // insn primary opcode
     uint8_t primary_opcode;
+    uint8_t opcode_map; // 0: one byte, 1: 0F escape
 
     // insn modrm
     x86_insn_modrm_t modrm;

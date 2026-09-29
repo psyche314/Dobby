@@ -33,13 +33,13 @@ int GenRelocateSingleX86Insn(addr_t curr_orig_ip, addr_t curr_relo_ip, uint8_t *
                              CodeMemBuffer *code_buffer, x86_insn_decode_t &insn, int8_t mode) {
 #define __ code_buffer->
 
-  int relocated_insn_len = -1;
 
   x86_options_t conf = {0};
   conf.mode = mode;
 
   // decode x86/x64 insn
   x86_insn_decode(&insn, (uint8_t *)buffer_cursor, &conf);
+  if (!insn.length) return -1;
 
   // x86 ip register == next instruction address
   curr_orig_ip = curr_orig_ip + insn.length;
@@ -51,10 +51,11 @@ int GenRelocateSingleX86Insn(addr_t curr_orig_ip, addr_t curr_relo_ip, uint8_t *
   auto x86_insn_encode_begin = [&] { x86_insn_encode_start = code_buffer->buffer_size; };
   auto x86_insn_encode_end = [&] { x86_insn_encoded_len = code_buffer->buffer_size - x86_insn_encode_start; };
 
-  if (insn.primary_opcode >= 0x70 && insn.primary_opcode <= 0x7F) { // jcc rel8
+  if ((!insn.opcode_map && insn.primary_opcode >= 0x70 && insn.primary_opcode <= 0x7F) ||
+      (insn.opcode_map == 1 && insn.primary_opcode >= 0x80 && insn.primary_opcode <= 0x8F)) { // Jcc
     DEBUG_LOG("[x86 relo] %p: jc rel8", buffer_cursor);
 
-    int8_t offset = insn.immediate;
+    int32_t offset = insn.opcode_map ? (int32_t)insn.immediate : (int8_t)insn.immediate;
     addr_t orig_dst_ip = curr_orig_ip + offset;
 #if defined(TARGET_ARCH_IA32)
     uint8_t opcode = 0x80 | (insn.primary_opcode & 0x0f);
@@ -66,7 +67,7 @@ int GenRelocateSingleX86Insn(addr_t curr_orig_ip, addr_t curr_relo_ip, uint8_t *
 #else
     // jcc_true stage 1
     const uint8_t label_jcc_cond_true_stage2 = 2;
-    __ Emit<int8_t>(insn.primary_opcode);
+    __ Emit<int8_t>(0x70 | (insn.primary_opcode & 0x0f));
     __ Emit<int8_t>(label_jcc_cond_true_stage2);
 
     // jcc_false
@@ -91,6 +92,7 @@ int GenRelocateSingleX86Insn(addr_t curr_orig_ip, addr_t curr_relo_ip, uint8_t *
       uint32_t jmp_near_range = (uint32_t)2 * 1024 * 1024 * 1024;
       auto blk = gNearMemoryAllocator.allocNearCodeBlock(insn.length + 6 + 8, orig_dst_ip, jmp_near_range);
       auto rip_insn_seq = (addr_t)blk.addr();
+      if (!rip_insn_seq) return -1;
       rip_insn_seq_addr = rip_insn_seq;
     }
 
@@ -108,7 +110,9 @@ int GenRelocateSingleX86Insn(addr_t curr_orig_ip, addr_t curr_relo_ip, uint8_t *
 
       auto rip_insn_req_ip = rip_insn_seq_addr;
       rip_insn_req_ip = rip_insn_req_ip + insn.length; // next insn addr
-      int32_t new_disp = (int32_t)(orig_dst_ip - rip_insn_req_ip);
+      int64_t distance = (int64_t)orig_dst_ip - (int64_t)rip_insn_req_ip;
+      if (distance < INT32_MIN || distance > INT32_MAX) return -1;
+      int32_t new_disp = (int32_t)distance;
 
       // keep orig insn opcode
       ___ EmitBuffer(buffer_cursor, insn.displacement_offset);
@@ -122,10 +126,11 @@ int GenRelocateSingleX86Insn(addr_t curr_orig_ip, addr_t curr_relo_ip, uint8_t *
       auto relo_next_ip = curr_relo_ip + x86_insn_encoded_len;
       codegen_x64_jmp_absolute_addr(&rip_insn_seq_buffer, relo_next_ip);
 
-      PatchExecutableCode((void *)rip_insn_seq_addr, rip_insn_seq_buffer.buffer, rip_insn_seq_buffer.buffer_size);
+      if (PatchExecutableCode((void *)rip_insn_seq_addr, rip_insn_seq_buffer.buffer, rip_insn_seq_buffer.buffer_size) != 0)
+        return -1;
     }
 
-  } else if (insn.primary_opcode == 0xEB) { // jmp rel8
+  } else if (!insn.opcode_map && insn.primary_opcode == 0xEB) { // jmp rel8
     DEBUG_LOG("[x86 relo] %p: jmp rel8", buffer_cursor);
 
     int8_t offset = insn.immediate;
@@ -139,7 +144,7 @@ int GenRelocateSingleX86Insn(addr_t curr_orig_ip, addr_t curr_relo_ip, uint8_t *
     // jmp *(rip)
     codegen_x64_jmp_absolute_addr(code_buffer, orig_dst_ip);
 #endif
-  } else if (insn.primary_opcode == 0xE8 || insn.primary_opcode == 0xE9) { // call or jmp rel32
+  } else if (!insn.opcode_map && (insn.primary_opcode == 0xE8 || insn.primary_opcode == 0xE9)) { // call or jmp rel32
     DEBUG_LOG("[x86 relo] %p:jmp or call rel32", buffer_cursor);
 
     int32_t offset = insn.immediate;
@@ -174,12 +179,12 @@ int GenRelocateSingleX86Insn(addr_t curr_orig_ip, addr_t curr_relo_ip, uint8_t *
       __ Emit<int64_t>(orig_dst_ip);
     }
 #endif
-  } else if (insn.primary_opcode >= 0xE0 && insn.primary_opcode <= 0xE2) { // LOOPNZ/LOOPZ/LOOP/JECXZ
+  } else if (!insn.opcode_map && insn.primary_opcode >= 0xE0 && insn.primary_opcode <= 0xE2) { // LOOPNZ/LOOPZ/LOOP/JECXZ
     // LOOP/LOOPcc
-    UNIMPLEMENTED();
-  } else if (insn.primary_opcode == 0xE3) {
+    return -1;
+  } else if (!insn.opcode_map && insn.primary_opcode == 0xE3) {
     // JCXZ JCEXZ JCRXZ
-    UNIMPLEMENTED();
+    return -1;
   } else {
     __ EmitBuffer(buffer_cursor, insn.length);
   }
@@ -190,7 +195,7 @@ int GenRelocateSingleX86Insn(addr_t curr_orig_ip, addr_t curr_relo_ip, uint8_t *
     int relo_len = relo_offset - last_relo_offset;
     DEBUG_LOG("insn -> relocated insn: %d -> %d", insn.length, relo_len);
   }
-  return relocated_insn_len;
+  return 0;
 }
 
 void GenRelocateCodeX86Shared(void *buffer, CodeMemBlock *origin, CodeMemBlock *relocated, bool branch) {
@@ -206,6 +211,10 @@ x86_try_again:
   }
 
   int ret = GenRelocateCodeFixed(buffer, origin, relocated, branch);
+  if (ret == -2) {
+    relocated->reset(0, 0);
+    return;
+  }
   if (ret != 0) {
     const int step_size = 16;
     expected_relocated_mem_size += step_size;

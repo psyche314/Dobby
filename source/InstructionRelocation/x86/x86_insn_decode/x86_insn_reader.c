@@ -59,9 +59,10 @@ static uint32_t read_dword(x86_insn_reader_t *rd) {
 static uint64_t read_qword(x86_insn_reader_t *rd) {
   DEBUG_LOG("[x86 insn reader] %p - 8", rd->buffer_cursor);
 
-  uint64_t *p = (uint64_t *)rd->buffer_cursor;
-  rd->buffer_cursor += 4;
-  return p[0];
+  uint64_t value;
+  memcpy(&value, rd->buffer_cursor, sizeof(value));
+  rd->buffer_cursor += sizeof(value);
+  return value;
 }
 
 static uint32_t read_imm(x86_insn_reader_t *rd, int size) {

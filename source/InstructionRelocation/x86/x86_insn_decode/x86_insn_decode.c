@@ -207,7 +207,7 @@ int x86_insn_has_modrm_byte(x86_insn_spec_t *insn) {
 
 int x86_insn_immediate_type(x86_insn_spec_t *insn) {
   int i;
-  for (i = 0; i < sizeof(insn->operands); i++) {
+  for (i = 0; i < sizeof(insn->operands) / sizeof(insn->operands[0]); i++) {
     switch (insn->operands[i].code) {
     case 'J':
     case 'I':
@@ -438,7 +438,9 @@ static void x86_insn_decode_opcode(x86_insn_reader_t *rd, x86_insn_decode_t *ins
   uint8_t opcode = read_byte(rd);
 
   x86_insn_spec_t insn_spec;
+  insn->opcode_map = 0;
   if (opcode == 0x0f) {
+    insn->opcode_map = 1;
     opcode = read_byte(rd);
     insn_spec = x86_opcode_map_two_byte[opcode];
   } else {
@@ -447,7 +449,14 @@ static void x86_insn_decode_opcode(x86_insn_reader_t *rd, x86_insn_decode_t *ins
 
   // check sse group
   if (X86_INSN_FLAG_GET_GROUP(insn_spec.flags) > X86_INSN_SSE_GROUP_START) {
-    UNIMPLEMENTED();
+    int group = X86_INSN_FLAG_GET_GROUP(insn_spec.flags);
+    int index = opcode & 7;
+    if (insn->prefix & INSN_PREFIX_REPZ)
+      insn_spec = x86_insn_sse_groups_repz[group].insns[index];
+    else if (insn->prefix & INSN_PREFIX_REPNZ)
+      insn_spec = x86_insn_sse_groups_repnz[group].insns[index];
+    else if (insn->prefix & INSN_PREFIX_OPERAND_SIZE)
+      insn_spec = x86_insn_sse_groups_operand_size[group].insns[index];
   }
 
   if (X86_INSN_FLAG_GET_GROUP(insn_spec.flags) > X86_INSN_GROUP_START &&
@@ -467,6 +476,22 @@ static void x86_insn_decode_opcode(x86_insn_reader_t *rd, x86_insn_decode_t *ins
     // update the insn spec
     insn_spec.name = group_insn->name;
     insn_spec.flags = group_insn->flags;
+    for (size_t i = 0; i < 3; ++i) {
+      if (group_insn->operands[i].code != '_')
+        insn_spec.operands[i] = group_insn->operands[i];
+    }
+  }
+
+  if (!insn->opcode_map && (opcode == 0xf6 || opcode == 0xf7)) {
+    // Group 3 has a width-dependent r/m operand and TEST alone has an immediate.
+    x86_insn_modrm_t modrm;
+    modrm.byte = peek_byte(rd);
+    insn_spec.operands[0].code = 'E';
+    insn_spec.operands[0].type = opcode == 0xf6 ? 'b' : 'v';
+    if (modrm.reg <= 1) {
+      insn_spec.operands[1].code = 'I';
+      insn_spec.operands[1].type = opcode == 0xf6 ? 'b' : 'z';
+    }
   }
 
   insn->primary_opcode = opcode;
@@ -542,6 +567,10 @@ void x86_insn_decode(x86_insn_decode_t *insn, uint8_t *buffer, x86_options_t *co
 
   // decode insn specp/x in
   x86_insn_decode_opcode(&rd, insn, conf);
+  if (!insn->insn_spec.name || strcmp(insn->insn_spec.name, "bad") == 0) {
+    insn->length = 0;
+    return;
+  }
 
   if (x86_insn_has_modrm_byte(&insn->insn_spec)) {
     // decode insn modrm sib (operand register, disp)

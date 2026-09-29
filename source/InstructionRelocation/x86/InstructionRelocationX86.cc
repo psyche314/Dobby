@@ -31,8 +31,9 @@ int GenRelocateCodeFixed(void *buffer, CodeMemBlock *origin, CodeMemBlock *reloc
   while ((buffer_cursor < ((uint8_t *)buffer + predefined_relocate_size))) {
     x86_insn_decode_t insn = {0};
     memset(&insn, 0, sizeof(insn));
-    GenRelocateSingleX86Insn(curr_orig_ip, curr_relo_ip, buffer_cursor, &turbo_assembler_,
-                             turbo_assembler_.code_buffer(), insn, 32);
+    if (GenRelocateSingleX86Insn(curr_orig_ip, curr_relo_ip, buffer_cursor, &turbo_assembler_,
+                             turbo_assembler_.code_buffer(), insn, 32) != 0)
+      return -2;
 
     // go next
     curr_orig_ip += insn.length;

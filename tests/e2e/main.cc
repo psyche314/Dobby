@@ -230,6 +230,70 @@ static void patch_pages() {
   report("PASS four-page patch, original permissions, unmapped failure, exact boundary");
 }
 
+#if defined(__x86_64__) || defined(__i386__)
+static void x86_prologues() {
+  const uint8_t prologues[][16] = {
+    {0x66,0x0f,0xef,0xc0,0xb8,7,0,0,0,0xc3}, // pxor
+    {0x66,0x0f,0xe8,0xc0,0xb8,7,0,0,0,0xc3}, // psubsb is not CALL
+    {0x66,0x0f,0xf6,0xc0,0xb8,7,0,0,0,0xc3}, // psadbw is not group 3
+    {0xf3,0x0f,0x10,0xff,0xb8,7,0,0,0,0xc3}, // movss xmm7, xmm7
+    {0xf2,0x0f,0x10,0xff,0xb8,7,0,0,0,0xc3}, // movsd xmm7, xmm7
+    {0x0f,0x10,0xff,0xb8,7,0,0,0,0xc3}, // movups xmm7, xmm7
+    {0x66,0x0f,0x70,0xc0,0x1b,0xb8,7,0,0,0,0xc3}, // pshufd + imm8
+    {0xf7,0xc0,0x11,0x22,0x33,0x44,0xb8,7,0,0,0,0xc3}, // test eax, imm32
+#if defined(__x86_64__)
+    {0x48,0xb8,7,0,0,0,0x55,0x66,0x77,0x88,0xc3}, // mov rax, imm64
+#endif
+  };
+  for (const auto &code : prologues) {
+    Mapping memory(1);
+    std::memcpy(memory.data, code, sizeof(code));
+    memory.protect(0, false, true);
+    auto function = (Function)memory.data;
+    CHECK(function() == 7);
+    CHECK(DobbyHook(memory.data, (void *)replacement, (void **)&original) == 0);
+    CHECK(original() == 7 && function() == 107);
+    CHECK(DobbyDisable(memory.data) == 0 && function() == 7);
+    CHECK(DobbyDestroy(memory.data) == 0);
+  }
+#if defined(__x86_64__)
+  for (int kind = 0; kind != 4; ++kind) {
+    Mapping memory(1);
+    const uint8_t caller[] = {0xe8,27,0,0,0,0xc3};
+    const uint8_t load[] = {0x8b,0x05,58,0,0,0,0xc3};
+    if (kind == 1) {
+      std::memcpy(memory.data, load, sizeof(load));
+      memory.data[64] = 7;
+    } else if (kind >= 2) {
+      uint8_t conditional[] = {0x31,0xc0,0x0f,(uint8_t)(kind == 2 ? 0x84 : 0x85),24,0,0,0};
+      std::memcpy(memory.data, conditional, sizeof(conditional));
+      make_function(memory.data + 8);
+      memory.data[9] = 8; // non-taken branch returns 8
+      make_function(memory.data + 32);
+    } else {
+      std::memcpy(memory.data, caller, sizeof(caller));
+      make_function(memory.data + 32);
+    }
+    memory.protect(0, false, true);
+    auto function = (Function)memory.data;
+    int expected = kind == 3 ? 8 : 7;
+    CHECK(function() == expected);
+    CHECK(DobbyHook(memory.data, (void *)replacement, (void **)&original) == 0);
+    CHECK(function() == expected + 100 && original() == expected);
+    CHECK(DobbyDestroy(memory.data) == 0 && function() == expected);
+  }
+#endif
+  Mapping unsupported(1);
+  // LOOP is unsupported; preparation must return an error without patching.
+  uint8_t code[32] = {0xe2,0xfe};
+  std::memcpy(unsupported.data, code, sizeof(code));
+  unsupported.protect(0, false, true);
+  CHECK(DobbyPrepare(unsupported.data, (void *)replacement, nullptr) != 0);
+  CHECK(std::memcmp(unsupported.data, code, sizeof(code)) == 0);
+  report("PASS SSE prefixes, grouped operands, immediates and unsupported relocation");
+}
+#endif
+
 static int run() {
   report("Dobby native E2E starting");
   { Mapping probe(1); printf("System page size: %zu bytes\n", probe.page_size); }
@@ -237,6 +301,9 @@ static int run() {
   CHECK(DobbyPrepare(nullptr, (void *)replacement, nullptr) != 0);
   CHECK(DobbyCommit(nullptr) != 0 && DobbyDisable(nullptr) != 0);
   patch_pages();
+#if defined(__x86_64__) || defined(__i386__)
+  x86_prologues();
+#endif
   lifecycle(false);
   lifecycle(true);
 #if defined(__arm__)
